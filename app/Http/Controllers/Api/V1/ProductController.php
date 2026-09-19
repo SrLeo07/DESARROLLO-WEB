@@ -47,8 +47,14 @@ class ProductController extends Controller
         return new ProductResource($product->refresh());
     }
 
-    public function destroy(Product $product): JsonResponse
+    public function destroy(Request $request, Product $product): JsonResponse
     {
+        if (! $request->user()?->tokenCan('productos.delete')) {
+            return response()->json([
+                'message' => 'El token no tiene permiso para eliminar productos.',
+            ], 403);
+        }
+
         $product->delete();
 
         return response()->json([

@@ -3,10 +3,14 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
-use App\Models\User;
+use GuzzleHttp\Psr7\Response as Psr7Response;
+use GuzzleHttp\Psr7\ServerRequest;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\Rule;
+use Laravel\Passport\Exceptions\OAuthServerException;
+use Laravel\Passport\Http\Controllers\AccessTokenController;
+use Laravel\Passport\Passport;
 
 class AuthController extends Controller
 {
@@ -15,32 +19,69 @@ class AuthController extends Controller
         $credentials = $request->validate([
             'email' => ['required', 'email'],
             'password' => ['required', 'string'],
+            'scopes' => ['sometimes', 'array'],
+            'scopes.*' => ['string', 'distinct', Rule::in(Passport::scopeIds())],
         ]);
 
-        $user = User::query()->where('email', $credentials['email'])->first();
+        $clientId = config('passport.password_client_id');
+        $clientSecret = config('passport.password_client_secret');
 
-        if (! $user || ! Hash::check($credentials['password'], $user->password)) {
+        if (blank($clientId) || blank($clientSecret)) {
+            return response()->json([
+                'message' => 'El cliente Password Grant no esta configurado.',
+            ], 500);
+        }
+
+        $passportRequest = (new ServerRequest('POST', '/oauth/token', [
+            'Accept' => 'application/json',
+            'Content-Type' => 'application/x-www-form-urlencoded',
+        ]))->withParsedBody([
+            'grant_type' => 'password',
+            'client_id' => $clientId,
+            'client_secret' => $clientSecret,
+            'username' => $credentials['email'],
+            'password' => $credentials['password'],
+            'scope' => implode(' ', $credentials['scopes'] ?? ['productos.read']),
+        ]);
+
+        try {
+            $tokenResponse = app(AccessTokenController::class)->issueToken(
+                $passportRequest,
+                new Psr7Response,
+            );
+        } catch (OAuthServerException) {
             return response()->json([
                 'message' => 'Credenciales incorrectas.',
             ], 401);
         }
 
-        $accessToken = $user->createToken('Postman CRUD Token')->accessToken;
+        $payload = json_decode($tokenResponse->getContent(), true);
 
-        return response()->json([
-            'message' => 'Inicio de sesion correcto.',
-            'token_type' => 'Bearer',
-            'access_token' => $accessToken,
-            'user' => $user,
-        ]);
+        if (! $tokenResponse->isSuccessful()) {
+            return response()->json([
+                'message' => 'Credenciales incorrectas.',
+            ], 401);
+        }
+
+        return response()->json($payload);
     }
 
     public function logout(Request $request): JsonResponse
     {
-        $request->user()?->token()?->revoke();
+        $accessToken = $request->user()?->token();
+
+        $accessToken?->refreshToken?->revoke();
+        $accessToken?->revoke();
 
         return response()->json([
-            'message' => 'Token revocado correctamente.',
+            'message' => 'Sesion cerrada y tokens revocados correctamente.',
+        ]);
+    }
+
+    public function me(Request $request): JsonResponse
+    {
+        return response()->json([
+            'user' => $request->user(),
         ]);
     }
 }

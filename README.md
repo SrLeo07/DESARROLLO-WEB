@@ -1,58 +1,132 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# API de productos con Laravel Passport
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+API REST desarrollada con Laravel 13 y Laravel Passport 13. Incluye autenticacion OAuth2 mediante Password Grant, renovacion de tokens, cierre de sesion con revocacion y autorizacion por scopes para el CRUD de productos.
 
-## About Laravel
+## Requisitos
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+- PHP 8.3 o superior con las extensiones requeridas por Laravel.
+- Composer 2.
+- SQLite, MySQL o PostgreSQL.
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
-
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
-
-## Learning Laravel
-
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
-
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
-
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
-
-## Agentic Development
-
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
+## Instalacion
 
 ```bash
-composer require laravel/boost --dev
-
-php artisan boost:install
+git clone https://github.com/SrLeo07/DESARROLLO-WEB.git
+cd DESARROLLO-WEB
+composer install
+cp .env.example .env
+php artisan key:generate
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+La configuracion predeterminada usa SQLite. Crea `database/database.sqlite` si no existe y ejecuta:
 
-## Contributing
+```bash
+php artisan migrate --seed
+php artisan passport:keys
+php artisan passport:client --password --name="Cliente Password Grant" --provider=users
+```
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+El ultimo comando muestra una sola vez el identificador y el secreto del cliente. Guardalos exclusivamente en el archivo `.env` local:
 
-## Code of Conduct
+```dotenv
+PASSPORT_PASSWORD_CLIENT_ID=
+PASSPORT_PASSWORD_CLIENT_SECRET=
+```
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+No agregues `.env`, secretos, access tokens, refresh tokens ni las claves de `storage/*.key` al repositorio. Todos estos archivos ya estan excluidos por `.gitignore`.
 
-## Security Vulnerabilities
+Inicia la aplicacion:
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+```bash
+php artisan serve
+```
 
-## License
+La semilla de desarrollo crea `demo@example.com` con la contrasena `password123`. Es una cuenta de demostracion: no debe usarse en produccion.
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+## Tokens y scopes
+
+- Access token: 1 hora.
+- Refresh token: 30 dias.
+- Personal access token: 6 meses.
+- Scope predeterminado: `productos.read`.
+- Scopes disponibles: `productos.read`, `productos.write`, `productos.delete`, `usuarios.read`, `admin` y `reportes`.
+
+El campo `scopes` del login es opcional. Si se omite, el token recibe solamente `productos.read`.
+
+## Endpoints
+
+| Metodo | Ruta | Autenticacion / scope |
+| --- | --- | --- |
+| POST | `/api/login` | Publica |
+| POST | `/oauth/token` | Cliente OAuth; se usa para renovar |
+| GET | `/api/me` | `auth:api` |
+| POST | `/api/logout` | `auth:api` |
+| GET | `/api/productos` | `productos.read` |
+| GET | `/api/productos/{id}` | `productos.read` |
+| POST | `/api/productos` | `productos.write` |
+| PUT/PATCH | `/api/productos/{id}` | `productos.write` |
+| DELETE | `/api/productos/{id}` | `productos.delete` |
+
+## Ejemplos equivalentes a Postman
+
+Los valores entre `<...>` son marcadores. Nunca publiques credenciales o tokens reales.
+
+Login con permisos de CRUD completo:
+
+```bash
+curl -X POST http://localhost:8000/api/login \
+  -H "Accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"demo@example.com","password":"password123","scopes":["productos.read","productos.write","productos.delete"]}'
+```
+
+Consultar el usuario y productos:
+
+```bash
+curl http://localhost:8000/api/me \
+  -H "Accept: application/json" \
+  -H "Authorization: Bearer <ACCESS_TOKEN>"
+
+curl http://localhost:8000/api/productos \
+  -H "Accept: application/json" \
+  -H "Authorization: Bearer <ACCESS_TOKEN>"
+```
+
+Crear un producto:
+
+```bash
+curl -X POST http://localhost:8000/api/productos \
+  -H "Accept: application/json" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <ACCESS_TOKEN>" \
+  -d '{"name":"Teclado mecanico","description":"Ejemplo","price":75.50,"stock":10}'
+```
+
+Renovar el token:
+
+```bash
+curl -X POST http://localhost:8000/oauth/token \
+  -H "Accept: application/json" \
+  -d "grant_type=refresh_token" \
+  -d "refresh_token=<REFRESH_TOKEN>" \
+  -d "client_id=<PASSPORT_PASSWORD_CLIENT_ID>" \
+  -d "client_secret=<PASSPORT_PASSWORD_CLIENT_SECRET>" \
+  -d "scope=productos.read"
+```
+
+Cerrar sesion revoca tanto el access token como su refresh token:
+
+```bash
+curl -X POST http://localhost:8000/api/logout \
+  -H "Accept: application/json" \
+  -H "Authorization: Bearer <ACCESS_TOKEN>"
+```
+
+## Pruebas y formato
+
+```bash
+php artisan test
+vendor/bin/pint --test
+```
+
+Las pruebas de integracion comprueban autenticacion `401`, login valido e invalido, `/me`, validacion de scopes, permisos `200/403`, CRUD, renovacion del refresh token y revocacion al cerrar sesion.

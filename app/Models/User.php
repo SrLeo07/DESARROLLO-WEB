@@ -19,6 +19,7 @@ class User extends Authenticatable implements OAuthenticatable
 
     /** @use HasFactory<UserFactory> */
     use HasFactory;
+
     use Notifiable;
 
     /**
